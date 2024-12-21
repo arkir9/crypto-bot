@@ -16,9 +16,11 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # Binance API setup
 exchange = ccxt.binance({
-    'apiKey': os.getenv('BINANCE_API_KEY'),
-    'secret': os.getenv('BINANCE_API_SECRET'),
+    'apiKey': os.getenv('BINANCE_API_KEY'), # get apis from binance testnet
+    'secret': os.getenv('BINANCE_API_SECRET'), 
+    'options': {'defaultType': 'future'},
 })
+exchange.set_sandbox_mode(True) # for testing, disable in prod
 
 # Global variables
 model_path = "ml_model.joblib"
