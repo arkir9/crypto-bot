@@ -6,43 +6,47 @@ from ta.volatility import BollingerBands
 from ta.trend import SMAIndicator
 
 # Initialize logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
 
 # Function to apply technical indicators (RSI, Bollinger Bands, SMA)
 def apply_technical_indicators(data):
     """
     Apply technical indicators (RSI, Bollinger Bands, SMA) to the market data.
-    
+
     Parameters:
         data (DataFrame): DataFrame with 'close' column for calculations.
-    
+
     Returns:
         DataFrame: Updated DataFrame with new indicator columns.
     """
     # Calculate RSI
-    rsi = RSIIndicator(close=data['close'], window=14)
-    data['rsi'] = rsi.rsi()
-    
+    rsi = RSIIndicator(close=data["close"], window=14)
+    data["rsi"] = rsi.rsi()
+
     # Calculate Bollinger Bands
-    bb = BollingerBands(close=data['close'], window=20, window_dev=2)
-    data['bb_upper'] = bb.bollinger_hband()
-    data['bb_lower'] = bb.bollinger_lband()
-    
+    bb = BollingerBands(close=data["close"], window=20, window_dev=2)
+    data["bb_upper"] = bb.bollinger_hband()
+    data["bb_lower"] = bb.bollinger_lband()
+
     # Calculate SMA
-    sma = SMAIndicator(close=data['close'], window=50)
-    data['sma'] = sma.sma_indicator()
-    
+    sma = SMAIndicator(close=data["close"], window=50)
+    data["sma"] = sma.sma_indicator()
+
     return data
+
 
 # Testing script
 def test_bot():
     logging.info("Starting Bot Testing Script...")
-    
+
     # Test 1: Market Data Fetching
     logging.info("TEST 1: Fetching Market Data...")
     try:
         symbol = "BTC/USDT"
-        data = fetch_market_data(symbol, '1h', limit=10)
+        data = fetch_market_data(symbol, "1h", limit=10)
         if not data.empty:
             logging.info(f"Market data fetched successfully for {symbol}.")
             logging.info(data.head())
@@ -69,9 +73,13 @@ def test_bot():
         if not data.empty:
             model = train_or_load_model(data)
             latest_data = data.iloc[-1]
-            features = latest_data[['rsi', 'bb_upper', 'bb_lower', 'sma']].values.reshape(1, -1)
+            features = latest_data[
+                ["rsi", "bb_upper", "bb_lower", "sma"]
+            ].values.reshape(1, -1)
             prediction = model.predict(features)[0]
-            logging.info(f"Prediction for the next price movement: {prediction} (1 = Up, 0 = Down)")
+            logging.info(
+                f"Prediction for the next price movement: {prediction} (1 = Up, 0 = Down)"
+            )
         else:
             logging.warning("Skipping ML test due to empty market data.")
     except Exception as e:
@@ -80,7 +88,9 @@ def test_bot():
     # Test 4: Sentiment Analysis
     logging.info("TEST 4: Sentiment Analysis...")
     try:
-        example_text = "Bitcoin is surging in popularity due to positive market conditions."
+        example_text = (
+            "Bitcoin is surging in popularity due to positive market conditions."
+        )
         sentiment_score = get_sentiment(example_text)
         logging.info(f"Sentiment analysis score for test input: {sentiment_score}")
     except Exception as e:
@@ -100,6 +110,7 @@ def test_bot():
 
     # Conclusion
     logging.info("Testing Completed. Review logs for any issues.")
+
 
 # Run the testing script
 if __name__ == "__main__":
