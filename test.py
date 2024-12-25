@@ -1,117 +1,46 @@
-import logging
-from datetime import datetime
-from main import fetch_market_data, train_or_load_model, get_sentiment
-from ta.momentum import RSIIndicator
-from ta.volatility import BollingerBands
-from ta.trend import SMAIndicator
+import unittest
+import pandas as pd
+from main import fetch_market_data, compute_technical_indicators, train_or_load_model
 
-# Initialize logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+class TestCryptoBot(unittest.TestCase):
 
+    def test_fetch_market_data(self):
+        # Test fetching market data for a valid pair
+        data = fetch_market_data("BTC/USDT", "1h", limit=10)
+        self.assertFalse(data.empty, "Market data should not be empty for valid pair.")
 
-# Function to apply technical indicators (RSI, Bollinger Bands, SMA)
-def apply_technical_indicators(data):
-    """
-    Apply technical indicators (RSI, Bollinger Bands, SMA) to the market data.
+    def test_apply_technical_indicators(self):
+        # Mock data simulating fetched market data with sufficient rows
+        sample_data = pd.DataFrame({
+            "open": [100, 102, 101, 105, 107, 110, 108, 109, 111, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125],
+            "high": [102, 103, 102, 106, 108, 111, 109, 110, 112, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126],
+            "low": [99, 101, 100, 104, 106, 109, 107, 108, 110, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124],
+            "close": [100, 102, 101, 105, 107, 110, 108, 109, 111, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125],
+            "volume": [10, 15, 10, 20, 25, 30, 20, 15, 10, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+        })
+        
+        # Call the function to compute technical indicators
+        indicators = compute_technical_indicators(sample_data)
+        
+        # Check if the expected columns are present in the output DataFrame
+        self.assertIn("rsi", indicators.columns, "RSI should be calculated and added to DataFrame.")
+        self.assertIn("sma", indicators.columns, "SMA should be calculated and added to DataFrame.")
+        self.assertIn("bb_middle", indicators.columns, "Bollinger Bands middle should be calculated and added to DataFrame.")
+        self.assertIn("bb_upper", indicators.columns, "Bollinger Bands upper should be calculated and added to DataFrame.")
+        self.assertIn("bb_lower", indicators.columns, "Bollinger Bands lower should be calculated and added to DataFrame.")
 
-    Parameters:
-        data (DataFrame): DataFrame with 'close' column for calculations.
+    def test_train_or_load_model(self):
+        # Mock data for model training
+        sample_data = pd.DataFrame({
+            "rsi": [30, 40, 50, 60, 70],
+            "bb_upper": [110, 112, 114, 116, 118],
+            "bb_lower": [90, 88, 86, 84, 82],
+            "sma": [100, 101, 102, 103, 104],
+            "close": [100, 102, 101, 105, 107],
+        })
+        
+        model = train_or_load_model(sample_data)
+        self.assertIsNotNone(model, "Model should be trained or loaded successfully.")
 
-    Returns:
-        DataFrame: Updated DataFrame with new indicator columns.
-    """
-    # Calculate RSI
-    rsi = RSIIndicator(close=data["close"], window=14)
-    data["rsi"] = rsi.rsi()
-
-    # Calculate Bollinger Bands
-    bb = BollingerBands(close=data["close"], window=20, window_dev=2)
-    data["bb_upper"] = bb.bollinger_hband()
-    data["bb_lower"] = bb.bollinger_lband()
-
-    # Calculate SMA
-    sma = SMAIndicator(close=data["close"], window=50)
-    data["sma"] = sma.sma_indicator()
-
-    return data
-
-
-# Testing script
-def test_bot():
-    logging.info("Starting Bot Testing Script...")
-
-    # Test 1: Market Data Fetching
-    logging.info("TEST 1: Fetching Market Data...")
-    try:
-        symbol = "BTC/USDT"
-        data = fetch_market_data(symbol, "1h", limit=10)
-        if not data.empty:
-            logging.info(f"Market data fetched successfully for {symbol}.")
-            logging.info(data.head())
-        else:
-            logging.warning("Market data is empty!")
-    except Exception as e:
-        logging.error(f"Error during market data fetching: {e}")
-
-    # Test 2: Technical Indicators
-    logging.info("TEST 2: Applying Technical Indicators...")
-    try:
-        if not data.empty:
-            indicators = apply_technical_indicators(data)
-            logging.info("Technical indicators applied successfully.")
-            logging.info(indicators.tail())
-        else:
-            logging.warning("Skipping indicators test due to empty market data.")
-    except Exception as e:
-        logging.error(f"Error during indicator calculation: {e}")
-
-    # Test 3: Machine Learning Model
-    logging.info("TEST 3: ML Model Training or Loading...")
-    try:
-        if not data.empty:
-            model = train_or_load_model(data)
-            latest_data = data.iloc[-1]
-            features = latest_data[
-                ["rsi", "bb_upper", "bb_lower", "sma"]
-            ].values.reshape(1, -1)
-            prediction = model.predict(features)[0]
-            logging.info(
-                f"Prediction for the next price movement: {prediction} (1 = Up, 0 = Down)"
-            )
-        else:
-            logging.warning("Skipping ML test due to empty market data.")
-    except Exception as e:
-        logging.error(f"Error during ML model testing: {e}")
-
-    # Test 4: Sentiment Analysis
-    logging.info("TEST 4: Sentiment Analysis...")
-    try:
-        example_text = (
-            "Bitcoin is surging in popularity due to positive market conditions."
-        )
-        sentiment_score = get_sentiment(example_text)
-        logging.info(f"Sentiment analysis score for test input: {sentiment_score}")
-    except Exception as e:
-        logging.error(f"Error during sentiment analysis: {e}")
-
-    # Test 5: Trade Execution (Dry Run)
-    logging.info("TEST 5: Simulated Trade Execution (Dry Run)...")
-    try:
-        order_type = "buy"
-        pair = "BTC/USDT"
-        amount = 0.001
-        logging.info(f"Dry Run: Would place {order_type} order for {amount} of {pair}.")
-        # Uncomment the following line to test real execution (use with caution!)
-        # place_order(order_type, pair, amount)
-    except Exception as e:
-        logging.error(f"Error during simulated trade execution: {e}")
-
-    # Conclusion
-    logging.info("Testing Completed. Review logs for any issues.")
-
-
-# Run the testing script
 if __name__ == "__main__":
-    test_bot()
+    unittest.main()

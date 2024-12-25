@@ -11,6 +11,7 @@ import requests
 from textblob import TextBlob
 import logging
 from dotenv import load_dotenv
+from datetime import datetime
 
 
 load_dotenv()
@@ -48,6 +49,8 @@ def fetch_market_data(pair, timeframe="1h", limit=100):
             ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"]
         )
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+        if df.empty:
+            logging.warning(f"No data returned for {pair}.")
         return df
     except Exception as e:
         logging.error(f"Error fetching market data for {pair}: {e}")
@@ -102,6 +105,8 @@ def fetch_latest_sentiment():
         )
         if news_response.status_code == 200:
             articles = news_response.json().get("articles", [])
+            if not articles:
+                logging.warning("No articles found for sentiment analysis.")
             all_text = " ".join([article["title"] for article in articles])
             return get_sentiment(all_text)
         else:
@@ -119,6 +124,9 @@ def train_or_load_model(data, retrain_interval=100):
     training_count = training_count + 1 if "training_count" in globals() else 0
 
     if not os.path.exists(model_path) or training_count >= retrain_interval:
+        if data.empty:
+            logging.warning("No data available for training the model.")
+            return None 
         X = data[["rsi", "bb_upper", "bb_lower", "sma"]].values
         y = np.where(data["close"].shift(-1) > data["close"], 1, 0)
         model = RandomForestClassifier()
@@ -173,6 +181,13 @@ def main():
         for pair in top_pairs
     }
 
+    # Filter out empty DataFrames
+    dataframes = {pair: df for pair, df in dataframes.items() if not df.empty}
+
+    if not dataframes:
+        logging.warning("No valid market data available. Exiting.")
+        return
+
     # Select the most profitable pair based on recent trends
     selected_pair = max(
         dataframes.keys(), key=lambda pair: dataframes[pair]["close"].iloc[-1]
@@ -181,6 +196,10 @@ def main():
 
     # Train or load the ML model
     model = train_or_load_model(data)
+
+    if model is None:
+        logging.warning("Model could not be trained or loaded. Exiting.")
+        return
 
     # Predict price movement
     prediction = predict_price_movement(model, data)
