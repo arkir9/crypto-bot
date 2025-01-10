@@ -12,6 +12,10 @@ from textblob import TextBlob
 import logging
 from dotenv import load_dotenv
 from datetime import datetime
+import time
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
 
 
 load_dotenv()
@@ -29,9 +33,9 @@ exchange = ccxt.binance(
         "options": {"defaultType": "future"},
     }
 )
-exchange.set_sandbox_mode(True)  # for testing, disable in prod
+# exchange.set_sandbox_mode(True)  # for testing, disable in prod
 
-# Global variables
+
 model_path = "ml_model.joblib"
 training_count = 0
 trailing_stop_loss_pct = 0.02
@@ -40,6 +44,7 @@ top_pairs = ["BTC/USDT", "ETH/USDT", "BNB/USDT", "XRP/USDT", "ADA/USDT"]
 
 
 # sentiments??
+
 
 def fetch_market_data(pair, timeframe="1h", limit=100):
     """Fetch historical OHLCV data for the given trading pair."""
@@ -126,7 +131,7 @@ def train_or_load_model(data, retrain_interval=100):
     if not os.path.exists(model_path) or training_count >= retrain_interval:
         if data.empty:
             logging.warning("No data available for training the model.")
-            return None 
+            return None
         X = data[["rsi", "bb_upper", "bb_lower", "sma"]].values
         y = np.where(data["close"].shift(-1) > data["close"], 1, 0)
         model = RandomForestClassifier()
@@ -148,21 +153,21 @@ def predict_price_movement(model, data):
 
 
 # --- Trade Execution ---
-def place_order(order_type, pair, amount):
-    """Place buy or sell orders securely."""
-    try:
-        if order_type == "buy":
-            order = exchange.create_market_buy_order(pair, amount)
-        elif order_type == "sell":
-            order = exchange.create_market_sell_order(pair, amount)
-        else:
-            logging.error(f"Invalid order type: {order_type}")
-            return None
-        logging.info(f"{order_type.capitalize()} order placed: {order}")
-        return order
-    except Exception as e:
-        logging.error(f"Error placing {order_type} order for {pair}: {e}")
-        return None
+# def place_order(order_type, pair, amount):
+#     """Place buy or sell orders securely."""
+#     try:
+#         if order_type == "buy":
+#             order = exchange.create_market_buy_order(pair, amount)
+#         elif order_type == "sell":
+#             order = exchange.create_market_sell_order(pair, amount)
+#         else:
+#             logging.error(f"Invalid order type: {order_type}")
+#             return None
+#         logging.info(f"{order_type.capitalize()} order placed: {order}")
+#         return order
+#     except Exception as e:
+#         logging.error(f"Error placing {order_type} order for {pair}: {e}")
+#         return None
 
 
 def trailing_stop_loss(entry_price, current_price):
@@ -171,58 +176,44 @@ def trailing_stop_loss(entry_price, current_price):
     return max(stop_loss_price, current_price * (1 - trailing_stop_loss_pct))
 
 
-# --- Main Workflow ---
 def main():
-    global trailing_stop_loss_pct, take_profit_ratio
+    while True:  
+        # Fetch market data for all pairs
+        dataframes = {
+            pair: compute_technical_indicators(fetch_market_data(pair))
+            for pair in top_pairs
+        }
 
-    # Fetch market data for all pairs
-    dataframes = {
-        pair: compute_technical_indicators(fetch_market_data(pair))
-        for pair in top_pairs
-    }
+        # Filter out empty DataFrames
+        dataframes = {pair: df for pair, df in dataframes.items() if not df.empty}
 
-    # Filter out empty DataFrames
-    dataframes = {pair: df for pair, df in dataframes.items() if not df.empty}
+        if not dataframes:
+            logging.warning("No valid market data available. Retrying in 1 minute.")
+            time.sleep(60)  # Wait before retrying
+            continue
 
-    if not dataframes:
-        logging.warning("No valid market data available. Exiting.")
-        return
+        for pair, data in dataframes.items():
+            # Ensure there are enough data points to calculate percentage change
+            if len(data) < 2:
+                logging.warning(f"Not enough data for {pair}. Skipping.")
+                continue
 
-    # Select the most profitable pair based on recent trends
-    selected_pair = max(
-        dataframes.keys(), key=lambda pair: dataframes[pair]["close"].iloc[-1]
-    )
-    data = dataframes[selected_pair]
+            # Calculate percentage change
+            recent_close = data["close"].iloc[-1]
+            previous_close = data["close"].iloc[-2]
+            percentage_change = ((recent_close - previous_close) / previous_close) * 100
 
-    # Train or load the ML model
-    model = train_or_load_model(data)
+            if percentage_change >= 5:
+                logging.info(
+                    f"🚀 {pair}: Price rose by {percentage_change:.2f}%! Recent close: {recent_close}, Previous close: {previous_close}"
+                )
+            else:
+                logging.info(
+                    f"{pair}: Price change is {percentage_change:.2f}%, below the 5% threshold."
+                )
 
-    if model is None:
-        logging.warning("Model could not be trained or loaded. Exiting.")
-        return
-
-    # Predict price movement
-    prediction = predict_price_movement(model, data)
-
-    # Fetch real-time sentiment
-    sentiment_score = fetch_latest_sentiment()
-
-    # Adjust strategy based on sentiment
-    if sentiment_score < -0.5:
-        trailing_stop_loss_pct = 0.03
-        take_profit_ratio = 0.03
-    elif sentiment_score > 0.5:
-        trailing_stop_loss_pct = 0.015
-        take_profit_ratio = 0.07
-
-    # Execute trade based on prediction
-    if prediction == 1:
-        logging.info("Prediction: Price will go up. Placing buy order.")
-        place_order("buy", selected_pair, 0.01)  # Example amount
-    else:
-        logging.info("Prediction: Price will go down. Placing sell order.")
-        place_order("sell", selected_pair, 0.01)  # Example amount
-
+        
+        time.sleep(600)  
 
 # Run the bot
 if __name__ == "__main__":
