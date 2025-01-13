@@ -77,8 +77,8 @@ async def check_prices(context: ContextTypes.DEFAULT_TYPE):
     """Check prices and send notifications for significant profit changes."""
     global last_notified_price
 
-    job = context.job
-    chat_id = job.context  # Get the chat_id from the job context
+    # Get the chat_id from the job context
+    chat_id = context.job.chat_id  # Use context.job.chat_id instead of job.context
 
     for pair in top_pairs:
         data = fetch_market_data(pair)
